@@ -171,31 +171,5 @@ This project demonstrates that:
 - Energy-aware strategies outperform fixed rules
 - System behavior changes significantly under extreme conditions
 
----
-
-## 🚀 Future Improvements
-
-- Use Deep Reinforcement Learning (DQN)
-- Add more realistic network delays
-- Multi-sensor system simulation
-- Real-time visualization dashboard
-
----
-
-## 👨‍💻 Team Contribution
-
-- Simulation design
-- RL implementation
-- Experiment analysis
-- Data visualization
-
----
-
-## 📌 Final Note
-
-This project focuses on **WHEN to send updates**, not WHAT to send.
-
-👉 The goal is **efficient and intelligent communication under constraints**
-
 
 
