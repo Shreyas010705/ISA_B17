@@ -1,6 +1,6 @@
 from environment import AoIEnvironment
 
-env = AoIEnvironment()
+env = AoIEnvironment(delay_steps=2, sleep_prob=0.3)
 
 state = env.reset()
 print("Initial:", state)
