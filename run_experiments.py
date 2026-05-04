@@ -5,34 +5,33 @@ from environment import AoIEnvironment
 from agent import QLearningAgent
 from baseline import GreedyPolicy, PeriodicPolicy
 
-# Fix randomness (VERY IMPORTANT for research)
 np.random.seed(42)
 
-# -------------------------------
+# -------------------------
 # Experiment settings
-# -------------------------------
+# -------------------------
+energy_levels = [0.2, 0.5, 0.8]
+battery_sizes = [3, 5, 7]
+duty_cycles = [2, 3, 5]
+outage_levels = [0, 5, 10]
 
-energy_levels = [0.2, 0.5, 0.8]        # low, medium, high
-battery_sizes = [3, 5, 7]              # small, medium, large
-duty_cycles = [1, 2, 3]                # strict → loose
-
-trials = 20
+trials = 10
 episodes = 30
-steps_per_episode = 50
+steps = 50
 
 
-# -------------------------------
-# Helper: Train RL Agent
-# -------------------------------
+# -------------------------
+# Train RL
+# -------------------------
 def train_rl(env):
     agent = QLearningAgent()
 
-    for ep in range(episodes):
+    for _ in range(episodes):
         state = env.reset()
 
-        for step in range(steps_per_episode):
+        for _ in range(steps):
             action = agent.choose_action(state)
-            next_state, reward, done = env.step(action)
+            next_state, reward, _ = env.step(action)
 
             agent.update(state, action, reward, next_state)
             state = next_state
@@ -40,89 +39,88 @@ def train_rl(env):
     return agent
 
 
-# -------------------------------
-# Helper: Test a policy
-# -------------------------------
-def evaluate_policy(env, policy):
+# -------------------------
+# Evaluate
+# -------------------------
+def evaluate(env, policy):
     state = env.reset()
     total_aoi = 0
     peak_aoi = 0
-    aoi_values = []
+    values = []
 
-    for step in range(50):
+    for _ in range(steps):
         action = policy.choose_action(state)
-        next_state, reward, done = env.step(action)
+        state, _, _ = env.step(action)
 
-        aoi = next_state[0]  # AoI is first element of state
+        aoi = state[0]
         total_aoi += aoi
         peak_aoi = max(peak_aoi, aoi)
-        aoi_values.append(aoi)
+        values.append(aoi)
 
-        state = next_state
-
-    avg_aoi = total_aoi / 50
-    variance = np.var(aoi_values)
-
-    return avg_aoi, peak_aoi, variance
+    return total_aoi / steps, peak_aoi, np.var(values)
 
 
-# -------------------------------
-# RL wrapper (for testing only)
-# -------------------------------
-class RLTestWrapper:
+# -------------------------
+# RL wrapper
+# -------------------------
+class RLWrapper:
     def __init__(self, agent):
         self.agent = agent
 
     def choose_action(self, state):
-        q_values = [self.agent.get_q(state, a) for a in [0, 1]]
-        return [0, 1][q_values.index(max(q_values))]
+        q_vals = [self.agent.get_q(state, a) for a in [0, 1]]
+        return [0, 1][q_vals.index(max(q_vals))]
 
 
-# -------------------------------
+# -------------------------
 # Run experiments
-# -------------------------------
+# -------------------------
+with open("results.csv", "w", newline="") as f:
+    writer = csv.writer(f)
 
-with open("results.csv", mode="w", newline="") as file:
-    writer = csv.writer(file)
-
-    # CSV header
     writer.writerow([
-        "energy", "battery", "duty",
-        "policy", "avg_aoi", "peak_aoi", "variance"
+        "Energy",
+        "Battery",
+        "Duty",
+        "Outage",
+        "Policy",
+        "Avg_AoI",
+        "Peak_AoI",
+        "Variance"
     ])
 
-    print("Starting experiments...\n")
+    print("Running experiments...\n")
 
     for energy in energy_levels:
         for battery in battery_sizes:
             for duty in duty_cycles:
+                for outage in outage_levels:
 
-                print(f"Running condition: Energy={energy}, Battery={battery}, Duty={duty}")
+                    print(f"E={energy}, B={battery}, D={duty}, O={outage}")
 
-                for t in range(trials):
+                    for _ in range(trials):
 
-                    # Create environment
-                    env = AoIEnvironment(
-                        energy_rate=energy,
-                        battery_size=battery,
-                        duty_cycle=duty
-                    )
+                        env = AoIEnvironment(
+                            energy_rate=energy,
+                            battery_size=battery,
+                            duty_cycle=duty,
+                            outage_duration=outage
+                        )
 
-                    # ---------------- RL ----------------
-                    rl_agent = train_rl(env)
-                    rl_policy = RLTestWrapper(rl_agent)
+                        # RL
+                        agent = train_rl(env)
+                        rl = RLWrapper(agent)
+                        avg, peak, var = evaluate(env, rl)
+                        writer.writerow([energy, battery, duty, outage, "RL", avg, peak, var])
 
-                    avg, peak, var = evaluate_policy(env, rl_policy)
-                    writer.writerow([energy, battery, duty, "RL", avg, peak, var])
+                        # Greedy
+                        greedy = GreedyPolicy()
+                        avg, peak, var = evaluate(env, greedy)
+                        writer.writerow([energy, battery, duty, outage, "Greedy", avg, peak, var])
 
-                    # ---------------- Greedy ----------------
-                    greedy = GreedyPolicy()
-                    avg, peak, var = evaluate_policy(env, greedy)
-                    writer.writerow([energy, battery, duty, "Greedy", avg, peak, var])
+                        # Periodic
+                        periodic = PeriodicPolicy(interval=2)
+                        avg, peak, var = evaluate(env, periodic)
+                        writer.writerow([energy, battery, duty, outage, "Periodic", avg, peak, var])
 
-                    # ---------------- Periodic ----------------
-                    periodic = PeriodicPolicy(interval=2)
-                    avg, peak, var = evaluate_policy(env, periodic)
-                    writer.writerow([energy, battery, duty, "Periodic", avg, peak, var])
-
-    print("\nExperiments complete! Results saved to results.csv")
+    print("\nDone! Results saved to results.csv")
