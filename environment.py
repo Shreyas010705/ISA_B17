@@ -19,10 +19,10 @@ class AoIEnvironment:
         self.outage_cycle = outage_cycle
         self.outage_duration = outage_duration
 
-        # Delay (partial observability)
+        # Delay
         self.delay_steps = delay_steps
 
-        # Deterministic duty cycle
+        # Deterministic sleep
         self.sleep_cycle = sleep_cycle
         self.sleep_duration = sleep_duration
 
@@ -36,17 +36,20 @@ class AoIEnvironment:
         self.battery = self.battery_size // 2
         self.time = 0
 
-        # Buffer for delayed state
+        # buffer for delay
         self.state_buffer = []
 
         return self.get_state()
 
     # -------------------------
-    # GET DELAYED STATE
+    # SAFE DELAY HANDLING
     # -------------------------
     def get_state(self):
-        if len(self.state_buffer) < self.delay_steps:
+        if len(self.state_buffer) == 0:
             return (1, self.battery, 0)
+
+        if len(self.state_buffer) < self.delay_steps:
+            return self.state_buffer[0]
 
         return self.state_buffer[-self.delay_steps]
 
