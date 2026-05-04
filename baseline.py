@@ -25,6 +25,7 @@ class PeriodicPolicy:
             return 0
 
         self.counter += 1
+
         if self.counter % self.interval == 0:
             return 1
         return 0
