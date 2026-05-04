@@ -6,33 +6,37 @@ class AoIEnvironment:
         self,
         energy_rate=0.5,
         battery_size=5,
-        duty_cycle=3,
+        sleep_cycle=10,
+        sleep_duration=3,
         outage_cycle=20,
         outage_duration=5
     ):
         # Core parameters
         self.energy_rate = energy_rate
         self.battery_size = battery_size
-        self.duty_cycle = duty_cycle
 
-        # Controlled energy disruption
+        # Duty cycle (CORRECTED)
+        self.sleep_cycle = sleep_cycle
+        self.sleep_duration = sleep_duration
+
+        # Energy outage (controlled)
         self.outage_cycle = outage_cycle
         self.outage_duration = outage_duration
 
         self.reset()
 
     # -------------------------
-    # Reset environment
+    # Reset
     # -------------------------
     def reset(self):
         self.aoi = 0
         self.battery = self.battery_size // 2
-        self.time_since_last_tx = 0
         self.time = 0
 
         # Partial observability memory
         self.prev_aoi = 0
         self.prev_battery = self.battery
+        self.prev_sleep = 0
 
         return self.get_state()
 
@@ -43,11 +47,11 @@ class AoIEnvironment:
         return (
             self.prev_aoi,
             self.prev_battery,
-            self.time_since_last_tx
+            self.prev_sleep
         )
 
     # -------------------------
-    # Step function
+    # Step
     # -------------------------
     def step(self, action):
 
@@ -63,35 +67,30 @@ class AoIEnvironment:
             self.battery = min(self.battery + 1, self.battery_size)
 
         # -------------------------
-        # 2. DUTY CYCLE (SLEEP MODE)
+        # 2. DUTY CYCLE (FIXED)
         # -------------------------
-        # Device is inactive during sleep slots
-        if self.time % self.duty_cycle == 0:
-            is_sleep = True
+        if self.time % self.sleep_cycle < self.sleep_duration:
+            is_sleep = 1
         else:
-            is_sleep = False
+            is_sleep = 0
 
-        if is_sleep:
-            action = 0  # forced wait
+        # If sleeping → cannot act
+        if is_sleep == 1:
+            action = 0
 
         # -------------------------
-        # 3. ACTION EXECUTION
+        # 3. ACTION EXECUTION (NO RATE LIMITING)
         # -------------------------
-        can_transmit = (
-            self.battery > 0 and
-            self.time_since_last_tx >= self.duty_cycle
-        )
+        can_transmit = self.battery > 0
 
         if action == 1 and can_transmit:
             self.aoi = 0
             self.battery -= 1
-            self.time_since_last_tx = 0
         else:
             self.aoi += 1
-            self.time_since_last_tx += 1
 
         # -------------------------
-        # 4. REWARD (CLEAN)
+        # 4. REWARD
         # -------------------------
         reward = -self.aoi
 
@@ -103,9 +102,11 @@ class AoIEnvironment:
         # -------------------------
         observed_aoi = self.prev_aoi
         observed_battery = self.prev_battery
+        observed_sleep = self.prev_sleep
 
         self.prev_aoi = self.aoi
         self.prev_battery = self.battery
+        self.prev_sleep = is_sleep
 
         # -------------------------
         # 6. TIME UPDATE
@@ -113,7 +114,7 @@ class AoIEnvironment:
         self.time += 1
 
         return (
-            (observed_aoi, observed_battery, self.time_since_last_tx),
+            (observed_aoi, observed_battery, observed_sleep),
             reward,
             False
         )
