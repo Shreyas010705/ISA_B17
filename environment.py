@@ -10,21 +10,21 @@ class AoIEnvironment:
         outage_duration=5,
         delay_steps=1,
         sleep_prob=0.2,
-        sleep_duration=3
+        sleep_duration=3   # max sleep duration
     ):
         self.energy_rate = energy_rate
         self.battery_size = battery_size
 
-        # Controlled energy outage
+        # Energy outage
         self.outage_cycle = outage_cycle
         self.outage_duration = outage_duration
 
-        # Partial observability
+        # Delay (partial observability)
         self.delay_steps = delay_steps
 
-        # Stochastic sleep
+        # Sleep parameters
         self.sleep_prob = sleep_prob
-        self.sleep_duration = sleep_duration
+        self.max_sleep_duration = sleep_duration
 
         self.reset()
 
@@ -39,7 +39,7 @@ class AoIEnvironment:
         # Sleep state
         self.sleep_timer = 0
 
-        # Buffer for delayed observation
+        # Buffer for delayed state
         self.state_buffer = []
 
         return self.get_state()
@@ -74,7 +74,7 @@ class AoIEnvironment:
         # -------------------------
         # Start sleep randomly
         if self.sleep_timer == 0 and np.random.rand() < self.sleep_prob:
-            self.sleep_timer = self.sleep_duration
+            self.sleep_timer = np.random.randint(1, self.max_sleep_duration + 1)
 
         # Continue sleep
         if self.sleep_timer > 0:
@@ -83,8 +83,8 @@ class AoIEnvironment:
         else:
             is_sleep = 0
 
-        # Force no action during sleep
-        if is_sleep:
+        # Force wait during sleep
+        if is_sleep == 1:
             action = 0
 
         # -------------------------
@@ -93,7 +93,7 @@ class AoIEnvironment:
         can_transmit = self.battery > 0
 
         if action == 1 and can_transmit:
-            self.aoi = 1   # consistent AoI reset
+            self.aoi = 1   # reset AoI
             self.battery -= 1
         else:
             self.aoi += 1
@@ -107,7 +107,7 @@ class AoIEnvironment:
             reward -= 1
 
         # -------------------------
-        # STORE STATE (for delay)
+        # STORE STATE FOR DELAY
         # -------------------------
         current_state = (self.aoi, self.battery, is_sleep)
         self.state_buffer.append(current_state)
@@ -117,5 +117,4 @@ class AoIEnvironment:
         # -------------------------
         self.time += 1
 
-        # Return delayed state
         return self.get_state(), reward, False
