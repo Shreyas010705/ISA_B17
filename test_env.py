@@ -1,23 +1,18 @@
-# Import the environment class from environment.py
 from environment import AoIEnvironment
 
-# Create environment object
 env = AoIEnvironment()
 
-# Reset environment (start fresh)
 state = env.reset()
+print("Initial:", state)
 
-# Print initial state
-print("Initial State:", state)
+for i in range(20):
+    action = i % 2
 
-# Run simulation for 10 steps
-for i in range(10):
-    
-    # Always choose action = 1 (try to transmit)
-    action = 1
-    
-    # Take one step in environment
-    next_state, reward, done = env.step(action)
-    
-    # Print what happened
-    print(f"Step {i+1}: State={next_state}, Reward={reward}")
+    next_state, reward, _ = env.step(action)
+
+    print(
+        f"Step {i} | State={state} | Action={action} | "
+        f"Reward={round(reward,2)} | Next={next_state}"
+    )
+
+    state = next_state
