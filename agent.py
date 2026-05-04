@@ -7,7 +7,7 @@ class QLearningAgent:
 
         self.alpha = 0.1
         self.gamma = 0.9
-        self.epsilon = 0.1
+        self.epsilon = 0.05   # 🔥 reduced (was 0.1)
 
         self.actions = [0, 1]
 
