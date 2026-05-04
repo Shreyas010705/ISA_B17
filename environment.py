@@ -9,22 +9,22 @@ class AoIEnvironment:
         outage_cycle=20,
         outage_duration=5,
         delay_steps=1,
-        sleep_prob=0.2,
-        sleep_duration=3   # max sleep duration
+        sleep_cycle=10,
+        sleep_duration=3
     ):
         self.energy_rate = energy_rate
         self.battery_size = battery_size
 
-        # Energy outage
+        # Energy outage (controlled)
         self.outage_cycle = outage_cycle
         self.outage_duration = outage_duration
 
         # Delay (partial observability)
         self.delay_steps = delay_steps
 
-        # Sleep parameters
-        self.sleep_prob = sleep_prob
-        self.max_sleep_duration = sleep_duration
+        # Deterministic duty cycle
+        self.sleep_cycle = sleep_cycle
+        self.sleep_duration = sleep_duration
 
         self.reset()
 
@@ -35,9 +35,6 @@ class AoIEnvironment:
         self.aoi = 1
         self.battery = self.battery_size // 2
         self.time = 0
-
-        # Sleep state
-        self.sleep_timer = 0
 
         # Buffer for delayed state
         self.state_buffer = []
@@ -59,7 +56,7 @@ class AoIEnvironment:
     def step(self, action):
 
         # -------------------------
-        # ENERGY MODEL
+        # 1. ENERGY MODEL
         # -------------------------
         if self.time % self.outage_cycle < self.outage_duration:
             energy_arrival = False
@@ -70,36 +67,30 @@ class AoIEnvironment:
             self.battery = min(self.battery + 1, self.battery_size)
 
         # -------------------------
-        # STOCHASTIC SLEEP MODEL
+        # 2. DUTY CYCLE (DETERMINISTIC)
         # -------------------------
-        # Start sleep randomly
-        if self.sleep_timer == 0 and np.random.rand() < self.sleep_prob:
-            self.sleep_timer = np.random.randint(1, self.max_sleep_duration + 1)
-
-        # Continue sleep
-        if self.sleep_timer > 0:
+        if self.time % self.sleep_cycle < self.sleep_duration:
             is_sleep = 1
-            self.sleep_timer -= 1
         else:
             is_sleep = 0
 
-        # Force wait during sleep
+        # Force no action during sleep
         if is_sleep == 1:
             action = 0
 
         # -------------------------
-        # ACTION EXECUTION
+        # 3. ACTION EXECUTION
         # -------------------------
         can_transmit = self.battery > 0
 
         if action == 1 and can_transmit:
-            self.aoi = 1   # reset AoI
+            self.aoi = 1
             self.battery -= 1
         else:
             self.aoi += 1
 
         # -------------------------
-        # REWARD
+        # 4. REWARD
         # -------------------------
         reward = -self.aoi
 
@@ -107,13 +98,13 @@ class AoIEnvironment:
             reward -= 1
 
         # -------------------------
-        # STORE STATE FOR DELAY
+        # 5. STORE STATE FOR DELAY
         # -------------------------
         current_state = (self.aoi, self.battery, is_sleep)
         self.state_buffer.append(current_state)
 
         # -------------------------
-        # TIME UPDATE
+        # 6. TIME UPDATE
         # -------------------------
         self.time += 1
 
