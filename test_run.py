@@ -1,81 +1,67 @@
-# Import everything
 from environment import AoIEnvironment
 from agent import QLearningAgent
-from baseline import GreedyPolicy, PeriodicPolicy
 
-# Create environment
-env = AoIEnvironment()
 
-# Create agents
-rl_agent = QLearningAgent()
-greedy_agent = GreedyPolicy()
-periodic_agent = PeriodicPolicy(interval=2)
+# -------------------------
+# Initialize
+# -------------------------
+env = AoIEnvironment(
+    energy_rate=0.5,
+    battery_size=5,
+    duty_cycle=3,
+    outage_duration=5
+)
 
-# -------------------------------
-# TRAIN RL AGENT
-# -------------------------------
-episodes = 50
-steps_per_episode = 50
+agent = QLearningAgent()
 
-print("Training RL Agent...\n")
+episodes = 5
+steps = 30
 
+
+# -------------------------
+# Training loop
+# -------------------------
 for ep in range(episodes):
     state = env.reset()
-    total_reward = 0
+    print(f"\n--- Episode {ep+1} ---")
 
-    for step in range(steps_per_episode):
-        action = rl_agent.choose_action(state)
-        next_state, reward, done = env.step(action)
+    for step in range(steps):
+        action = agent.choose_action(state)
+        next_state, reward, _ = env.step(action)
 
-        rl_agent.update(state, action, reward, next_state)
+        agent.update(state, action, reward, next_state)
+
+        # Debug print (VERY IMPORTANT)
+        print(
+            f"Step {step} | "
+            f"State={state} | "
+            f"Action={action} | "
+            f"Reward={round(reward,2)} | "
+            f"Next={next_state}"
+        )
 
         state = next_state
-        total_reward += reward
-
-    print(f"Episode {ep+1}: Total Reward = {total_reward}")
-
-print("\nTraining Complete!\n")
 
 
-# -------------------------------
-# TEST FUNCTION (for all policies)
-# -------------------------------
-def test_policy(policy, name):
-    print(f"\nTesting {name}...\n")
+# -------------------------
+# Testing trained agent
+# -------------------------
+print("\n--- TESTING TRAINED AGENT ---")
 
-    state = env.reset()
-    total_reward = 0
+state = env.reset()
 
-    for step in range(20):
-        action = policy.choose_action(state)
-        next_state, reward, done = env.step(action)
+for step in range(20):
+    # Greedy action (no exploration)
+    q_values = [agent.get_q(state, a) for a in [0, 1]]
+    action = [0, 1][q_values.index(max(q_values))]
 
-        print(f"Step {step+1}: State={next_state}, Action={action}, Reward={reward}")
+    next_state, reward, _ = env.step(action)
 
-        total_reward += reward
-        state = next_state
+    print(
+        f"Step {step} | "
+        f"State={state} | "
+        f"Action={action} | "
+        f"Reward={round(reward,2)}"
+    )
 
-    print(f"\n{name} Total Reward: {total_reward}")
-
-
-# -------------------------------
-# TEST ALL POLICIES
-# -------------------------------
-
-# RL (use best action, no exploration)
-class RLTestWrapper:
-    def __init__(self, agent):
-        self.agent = agent
-
-    def choose_action(self, state):
-        q_values = [self.agent.get_q(state, a) for a in [0, 1]]
-        return [0, 1][q_values.index(max(q_values))]
-
-rl_test_agent = RLTestWrapper(rl_agent)
-
-# Run tests
-test_policy(rl_test_agent, "RL Agent")
-test_policy(greedy_agent, "Greedy Policy")
-test_policy(periodic_agent, "Periodic Policy")
-
-print("\nDone.")
+    state = next_state
