@@ -7,12 +7,12 @@ from baseline import GreedyPolicy, PeriodicPolicy
 
 np.random.seed(42)
 
-# -------------------------
-# Experiment settings
-# -------------------------
 energy_levels = [0.2, 0.5, 0.8]
 battery_sizes = [3, 5, 7]
-duty_cycles = [2, 3, 5]
+
+sleep_cycles = [10]
+sleep_durations = [2, 4]
+
 outage_levels = [0, 5, 10]
 
 trials = 10
@@ -20,9 +20,6 @@ episodes = 30
 steps = 50
 
 
-# -------------------------
-# Train RL
-# -------------------------
 def train_rl(env):
     agent = QLearningAgent()
 
@@ -39,30 +36,22 @@ def train_rl(env):
     return agent
 
 
-# -------------------------
-# Evaluate
-# -------------------------
 def evaluate(env, policy):
     state = env.reset()
-    total_aoi = 0
-    peak_aoi = 0
     values = []
+    peak = 0
 
     for _ in range(steps):
         action = policy.choose_action(state)
         state, _, _ = env.step(action)
 
         aoi = state[0]
-        total_aoi += aoi
-        peak_aoi = max(peak_aoi, aoi)
         values.append(aoi)
+        peak = max(peak, aoi)
 
-    return total_aoi / steps, peak_aoi, np.var(values)
+    return np.mean(values), peak, np.var(values)
 
 
-# -------------------------
-# RL wrapper
-# -------------------------
 class RLWrapper:
     def __init__(self, agent):
         self.agent = agent
@@ -72,55 +61,35 @@ class RLWrapper:
         return [0, 1][q_vals.index(max(q_vals))]
 
 
-# -------------------------
-# Run experiments
-# -------------------------
 with open("results.csv", "w", newline="") as f:
     writer = csv.writer(f)
 
     writer.writerow([
-        "Energy",
-        "Battery",
-        "Duty",
-        "Outage",
-        "Policy",
-        "Avg_AoI",
-        "Peak_AoI",
-        "Variance"
+        "Energy", "Battery", "SleepDur", "Outage",
+        "Policy", "Avg_AoI", "Peak_AoI", "Variance"
     ])
-
-    print("Running experiments...\n")
 
     for energy in energy_levels:
         for battery in battery_sizes:
-            for duty in duty_cycles:
+            for sleep_dur in sleep_durations:
                 for outage in outage_levels:
-
-                    print(f"E={energy}, B={battery}, D={duty}, O={outage}")
 
                     for _ in range(trials):
 
                         env = AoIEnvironment(
                             energy_rate=energy,
                             battery_size=battery,
-                            duty_cycle=duty,
+                            sleep_cycle=10,
+                            sleep_duration=sleep_dur,
                             outage_duration=outage
                         )
 
-                        # RL
                         agent = train_rl(env)
                         rl = RLWrapper(agent)
-                        avg, peak, var = evaluate(env, rl)
-                        writer.writerow([energy, battery, duty, outage, "RL", avg, peak, var])
+                        writer.writerow([energy, battery, sleep_dur, outage, "RL", *evaluate(env, rl)])
 
-                        # Greedy
-                        greedy = GreedyPolicy()
-                        avg, peak, var = evaluate(env, greedy)
-                        writer.writerow([energy, battery, duty, outage, "Greedy", avg, peak, var])
+                        writer.writerow([energy, battery, sleep_dur, outage, "Greedy", *evaluate(env, GreedyPolicy())])
 
-                        # Periodic
-                        periodic = PeriodicPolicy(interval=2)
-                        avg, peak, var = evaluate(env, periodic)
-                        writer.writerow([energy, battery, duty, outage, "Periodic", avg, peak, var])
+                        writer.writerow([energy, battery, sleep_dur, outage, "Periodic", *evaluate(env, PeriodicPolicy())])
 
-    print("\nDone! Results saved to results.csv")
+print("Done! results.csv generated.")
