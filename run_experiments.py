@@ -7,19 +7,24 @@ from baseline import GreedyPolicy, PeriodicPolicy
 
 np.random.seed(42)
 
+# -------------------------
+# PARAMETERS
+# -------------------------
 energy_levels = [0.2, 0.5, 0.8]
 battery_sizes = [3, 5, 7]
-
-sleep_cycles = [10]
-sleep_durations = [2, 4]
-
 outage_levels = [0, 5, 10]
+
+delay_levels = [1, 2, 3]
+sleep_probs = [0.1, 0.2, 0.3]
 
 trials = 10
 episodes = 30
 steps = 50
 
 
+# -------------------------
+# TRAIN RL
+# -------------------------
 def train_rl(env):
     agent = QLearningAgent()
 
@@ -36,6 +41,9 @@ def train_rl(env):
     return agent
 
 
+# -------------------------
+# EVALUATE
+# -------------------------
 def evaluate(env, policy):
     state = env.reset()
     values = []
@@ -52,6 +60,9 @@ def evaluate(env, policy):
     return np.mean(values), peak, np.var(values)
 
 
+# -------------------------
+# RL WRAPPER
+# -------------------------
 class RLWrapper:
     def __init__(self, agent):
         self.agent = agent
@@ -61,35 +72,49 @@ class RLWrapper:
         return [0, 1][q_vals.index(max(q_vals))]
 
 
+# -------------------------
+# RUN EXPERIMENTS
+# -------------------------
 with open("results.csv", "w", newline="") as f:
     writer = csv.writer(f)
 
     writer.writerow([
-        "Energy", "Battery", "SleepDur", "Outage",
+        "Energy", "Battery", "Outage",
+        "Delay", "SleepProb",
         "Policy", "Avg_AoI", "Peak_AoI", "Variance"
     ])
 
+    print("Running experiments...\n")
+
     for energy in energy_levels:
         for battery in battery_sizes:
-            for sleep_dur in sleep_durations:
-                for outage in outage_levels:
+            for outage in outage_levels:
+                for delay in delay_levels:
+                    for s_prob in sleep_probs:
 
-                    for _ in range(trials):
+                        print(f"E={energy}, B={battery}, O={outage}, D={delay}, S={s_prob}")
 
-                        env = AoIEnvironment(
-                            energy_rate=energy,
-                            battery_size=battery,
-                            sleep_cycle=10,
-                            sleep_duration=sleep_dur,
-                            outage_duration=outage
-                        )
+                        for _ in range(trials):
 
-                        agent = train_rl(env)
-                        rl = RLWrapper(agent)
-                        writer.writerow([energy, battery, sleep_dur, outage, "RL", *evaluate(env, rl)])
+                            env = AoIEnvironment(
+                                energy_rate=energy,
+                                battery_size=battery,
+                                outage_duration=outage,
+                                delay_steps=delay,
+                                sleep_prob=s_prob,
+                                sleep_duration=3
+                            )
 
-                        writer.writerow([energy, battery, sleep_dur, outage, "Greedy", *evaluate(env, GreedyPolicy())])
+                            # RL
+                            agent = train_rl(env)
+                            rl = RLWrapper(agent)
+                            writer.writerow([energy, battery, outage, delay, s_prob, "RL", *evaluate(env, rl)])
 
-                        writer.writerow([energy, battery, sleep_dur, outage, "Periodic", *evaluate(env, PeriodicPolicy())])
+                            # Greedy
+                            writer.writerow([energy, battery, outage, delay, s_prob, "Greedy", *evaluate(env, GreedyPolicy())])
 
-print("Done! results.csv generated.")
+                            # Periodic
+                            writer.writerow([energy, battery, outage, delay, s_prob, "Periodic", *evaluate(env, PeriodicPolicy())])
+
+    print("\nDone! results.csv generated.")
+    
