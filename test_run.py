@@ -1,7 +1,7 @@
 from environment import AoIEnvironment
 from agent import QLearningAgent
 
-env = AoIEnvironment()
+env = AoIEnvironment(delay_steps=2, sleep_prob=0.2)
 agent = QLearningAgent()
 
 state = env.reset()
@@ -12,6 +12,6 @@ for i in range(30):
 
     agent.update(state, action, reward, next_state)
 
-    print(f"{i} | State={state} | Action={action} | Reward={reward}")
+    print(f"{i} | State={state} | Action={action} | Reward={round(reward,2)}")
 
     state = next_state
