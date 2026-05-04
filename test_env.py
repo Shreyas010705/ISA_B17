@@ -1,18 +1,28 @@
 from environment import AoIEnvironment
 
-env = AoIEnvironment(delay_steps=2, sleep_prob=0.3)
+# Use deterministic parameters
+env = AoIEnvironment(
+    energy_rate=0.5,
+    battery_size=5,
+    sleep_cycle=10,
+    sleep_duration=3,
+    delay_steps=2
+)
 
 state = env.reset()
-print("Initial:", state)
+print("Initial State:", state)
 
 for i in range(20):
-    action = i % 2
+    action = i % 2  # alternate actions (0,1)
 
     next_state, reward, _ = env.step(action)
 
     print(
-        f"Step {i} | State={state} | Action={action} | "
-        f"Reward={round(reward,2)} | Next={next_state}"
+        f"Step {i} | "
+        f"State={state} | "
+        f"Action={action} | "
+        f"Reward={round(reward,2)} | "
+        f"Next={next_state}"
     )
 
     state = next_state
