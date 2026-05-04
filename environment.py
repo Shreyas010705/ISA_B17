@@ -6,57 +6,60 @@ class AoIEnvironment:
         self,
         energy_rate=0.5,
         battery_size=5,
-        sleep_cycle=10,
-        sleep_duration=3,
         outage_cycle=20,
-        outage_duration=5
+        outage_duration=5,
+        delay_steps=1,
+        sleep_prob=0.2,
+        sleep_duration=3
     ):
-        # Core parameters
         self.energy_rate = energy_rate
         self.battery_size = battery_size
 
-        # Duty cycle (CORRECTED)
-        self.sleep_cycle = sleep_cycle
-        self.sleep_duration = sleep_duration
-
-        # Energy outage (controlled)
+        # Controlled energy outage
         self.outage_cycle = outage_cycle
         self.outage_duration = outage_duration
+
+        # Partial observability
+        self.delay_steps = delay_steps
+
+        # Stochastic sleep
+        self.sleep_prob = sleep_prob
+        self.sleep_duration = sleep_duration
 
         self.reset()
 
     # -------------------------
-    # Reset
+    # RESET
     # -------------------------
     def reset(self):
-        self.aoi = 0
+        self.aoi = 1
         self.battery = self.battery_size // 2
         self.time = 0
 
-        # Partial observability memory
-        self.prev_aoi = 0
-        self.prev_battery = self.battery
-        self.prev_sleep = 0
+        # Sleep state
+        self.sleep_timer = 0
+
+        # Buffer for delayed observation
+        self.state_buffer = []
 
         return self.get_state()
 
     # -------------------------
-    # Observed state (delayed)
+    # GET DELAYED STATE
     # -------------------------
     def get_state(self):
-        return (
-            self.prev_aoi,
-            self.prev_battery,
-            self.prev_sleep
-        )
+        if len(self.state_buffer) < self.delay_steps:
+            return (1, self.battery, 0)
+
+        return self.state_buffer[-self.delay_steps]
 
     # -------------------------
-    # Step
+    # STEP
     # -------------------------
     def step(self, action):
 
         # -------------------------
-        # 1. ENERGY ARRIVAL (CONTROLLED)
+        # ENERGY MODEL
         # -------------------------
         if self.time % self.outage_cycle < self.outage_duration:
             energy_arrival = False
@@ -67,54 +70,52 @@ class AoIEnvironment:
             self.battery = min(self.battery + 1, self.battery_size)
 
         # -------------------------
-        # 2. DUTY CYCLE (FIXED)
+        # STOCHASTIC SLEEP MODEL
         # -------------------------
-        if self.time % self.sleep_cycle < self.sleep_duration:
+        # Start sleep randomly
+        if self.sleep_timer == 0 and np.random.rand() < self.sleep_prob:
+            self.sleep_timer = self.sleep_duration
+
+        # Continue sleep
+        if self.sleep_timer > 0:
             is_sleep = 1
+            self.sleep_timer -= 1
         else:
             is_sleep = 0
 
-        # If sleeping → cannot act
-        if is_sleep == 1:
+        # Force no action during sleep
+        if is_sleep:
             action = 0
 
         # -------------------------
-        # 3. ACTION EXECUTION (NO RATE LIMITING)
+        # ACTION EXECUTION
         # -------------------------
         can_transmit = self.battery > 0
 
         if action == 1 and can_transmit:
-            self.aoi = 0
+            self.aoi = 1   # consistent AoI reset
             self.battery -= 1
         else:
             self.aoi += 1
 
         # -------------------------
-        # 4. REWARD
+        # REWARD
         # -------------------------
         reward = -self.aoi
 
         if action == 1 and can_transmit:
-            reward -= 1  # transmission cost
+            reward -= 1
 
         # -------------------------
-        # 5. PARTIAL OBSERVABILITY UPDATE
+        # STORE STATE (for delay)
         # -------------------------
-        observed_aoi = self.prev_aoi
-        observed_battery = self.prev_battery
-        observed_sleep = self.prev_sleep
-
-        self.prev_aoi = self.aoi
-        self.prev_battery = self.battery
-        self.prev_sleep = is_sleep
+        current_state = (self.aoi, self.battery, is_sleep)
+        self.state_buffer.append(current_state)
 
         # -------------------------
-        # 6. TIME UPDATE
+        # TIME UPDATE
         # -------------------------
         self.time += 1
 
-        return (
-            (observed_aoi, observed_battery, observed_sleep),
-            reward,
-            False
-        )
+        # Return delayed state
+        return self.get_state(), reward, False
