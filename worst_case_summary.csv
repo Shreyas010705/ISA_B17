@@ -1,0 +1,5 @@
+Policy,Avg_AoI,Variance,Peak_AoI,P95_AoI,Spike_Freq
+Greedy,9.8,58.27,31.78,24.46,0.08
+Periodic,11.34,77.67,32.6,29.31,0.18
+Threshold,13.3,120.05,42.56,34.69,0.21
+RL,9.71,61.95,32.7,25.47,0.09

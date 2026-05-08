@@ -3,9 +3,7 @@ import numpy as np
 
 from environment import AoIEnvironment
 from agent import QLearningAgent
-from baseline import GreedyPolicy, PeriodicPolicy
-
-np.random.seed(42)
+from baseline import GreedyPolicy, PeriodicPolicy, ThresholdPolicy
 
 # -------------------------
 # PARAMETERS
@@ -15,23 +13,27 @@ battery_sizes = [3, 5, 7]
 outage_levels = [0, 5, 10]
 
 sleep_cycles = [10]
-sleep_durations = [2, 4]
+sleep_durations = [0, 2, 4]
 
 delay_levels = [1, 2, 3]
 
-trials = 10
-episodes = 50       # 🔥 increased for better learning
-steps = 100         # 🔥 longer episode
+trials = 30            # 🔥 increased
+episodes = 50
+steps = 200
+
 
 
 # -------------------------
-# TRAIN RL (WITH EPISODES)
+# TRAIN RL
 # -------------------------
 def train_rl(env):
     agent = QLearningAgent()
 
+    episode_rewards = []  # <-- added
+
     for _ in range(episodes):
         state = env.reset()
+        total_reward = 0  # <-- added
 
         for _ in range(steps):
             action = agent.choose_action(state)
@@ -40,17 +42,28 @@ def train_rl(env):
             agent.update(state, action, reward, next_state)
             state = next_state
 
-        # 🔥 IMPORTANT: decay exploration
+            total_reward += reward  # <-- added
+
         agent.decay_epsilon()
+
+        episode_rewards.append(total_reward)  # <-- added
+
+    # Optional: quick sanity print (last 5 episodes)
+    print("Last 5 episode rewards:", episode_rewards[-5:])
 
     return agent
 
 
 # -------------------------
-# EVALUATE POLICY
+# EVALUATE
 # -------------------------
 def evaluate(env, policy):
     state = env.reset()
+
+    # 🔥 CRITICAL: reset policy state every trial
+    if hasattr(policy, "reset"):
+        policy.reset()
+
     values = []
     peak = 0
 
@@ -58,12 +71,18 @@ def evaluate(env, policy):
         action = policy.choose_action(state)
         state, _, _ = env.step(action)
 
-        aoi = state[0]
+        # Use TRUE AoI (not delayed state)
+        aoi = env.aoi
+
         values.append(aoi)
         peak = max(peak, aoi)
 
-    return np.mean(values), peak, np.var(values)
+    p95 = np.percentile(values, 95)
 
+    tau = 20  # fixed spike threshold (DO NOT change later)
+    spike_freq = np.mean([v > tau for v in values])
+
+    return np.mean(values), peak, np.var(values), p95, spike_freq
 
 # -------------------------
 # RL WRAPPER
@@ -78,7 +97,7 @@ class RLWrapper:
         max_q = max(q_vals)
         best_actions = [a for a, q in zip([0, 1], q_vals) if q == max_q]
 
-        return np.random.choice(best_actions)
+        return best_actions[0]
 
 
 # -------------------------
@@ -88,13 +107,16 @@ with open("results.csv", "w", newline="") as f:
     writer = csv.writer(f)
 
     writer.writerow([
+        "Trial_ID",
         "Energy", "Battery", "Outage",
         "SleepCycle", "SleepDuration",
         "Delay",
-        "Policy", "Avg_AoI", "Peak_AoI", "Variance"
+        "Policy", "Avg_AoI", "Peak_AoI", "Variance", "P95_AoI", "Spike_Freq"
     ])
 
     print("Running experiments...\n")
+
+    trial_counter = 0
 
     for energy in energy_levels:
         for battery in battery_sizes:
@@ -105,9 +127,36 @@ with open("results.csv", "w", newline="") as f:
 
                             print(f"E={energy}, B={battery}, O={outage}, C={cycle}, D={duration}, Delay={delay}")
 
-                            for _ in range(trials):
+                            # -------------------------
+                            # TRAIN RL ONCE
+                            # -------------------------
+                            np.random.seed(42)
+                            train_env = AoIEnvironment(
+                                energy_rate=energy,
+                                battery_size=battery,
+                                outage_duration=outage,
+                                sleep_cycle=cycle,
+                                sleep_duration=duration,
+                                delay_steps=delay
+                            )
 
-                                env = AoIEnvironment(
+                            agent = train_rl(train_env)
+                            rl = RLWrapper(agent)
+
+                            # -------------------------
+                            # MULTIPLE TRIALS
+                            # -------------------------
+                            for t in range(trials):
+
+                                trial_counter += 1
+
+                                # independent randomness
+                                np.random.seed(1000 + t)
+
+                                # -------------------------
+                                # RL
+                                # -------------------------
+                                eval_env = AoIEnvironment(
                                     energy_rate=energy,
                                     battery_size=battery,
                                     outage_duration=outage,
@@ -116,40 +165,76 @@ with open("results.csv", "w", newline="") as f:
                                     delay_steps=delay
                                 )
 
-                                # -------------------------
-                                # RL
-                                # -------------------------
-                                agent = train_rl(env)
-                                rl = RLWrapper(agent)
-
-                                avg, peak, var = evaluate(env, rl)
+                                avg, peak, var, p95, spike = evaluate(eval_env, rl)
 
                                 writer.writerow([
+                                    trial_counter,
                                     energy, battery, outage,
                                     cycle, duration, delay,
-                                    "RL", avg, peak, var
+                                    "RL", avg, peak, var, p95, spike
                                 ])
 
                                 # -------------------------
                                 # GREEDY
                                 # -------------------------
-                                avg, peak, var = evaluate(env, GreedyPolicy())
+                                eval_env = AoIEnvironment(
+                                    energy_rate=energy,
+                                    battery_size=battery,
+                                    outage_duration=outage,
+                                    sleep_cycle=cycle,
+                                    sleep_duration=duration,
+                                    delay_steps=delay
+                                )
+
+                                avg, peak, var, p95, spike = evaluate(eval_env, GreedyPolicy())
 
                                 writer.writerow([
+                                    trial_counter,
                                     energy, battery, outage,
                                     cycle, duration, delay,
-                                    "Greedy", avg, peak, var
+                                    "Greedy", avg, peak, var, p95, spike
+                                ])
+
+                                # -------------------------                             
+                                # PERIODIC (FIXED INTERVAL)
+                                # -------------------------
+                                eval_env = AoIEnvironment(
+                                    energy_rate=energy,
+                                    battery_size=battery,
+                                    outage_duration=outage,
+                                    sleep_cycle=cycle,
+                                    sleep_duration=duration,
+                                    delay_steps=delay
+                                )
+
+                                avg, peak, var, p95, spike = evaluate(eval_env, PeriodicPolicy(interval=5))
+
+                                writer.writerow([
+                                    trial_counter,
+                                    energy, battery, outage,
+                                    cycle, duration, delay,
+                                    "Periodic", avg, peak, var, p95, spike
                                 ])
 
                                 # -------------------------
-                                # PERIODIC
+                                # THRESHOLD POLICY
                                 # -------------------------
-                                avg, peak, var = evaluate(env, PeriodicPolicy())
+                                eval_env = AoIEnvironment(
+                                    energy_rate=energy,
+                                    battery_size=battery,
+                                    outage_duration=outage,
+                                    sleep_cycle=cycle,
+                                    sleep_duration=duration,
+                                    delay_steps=delay
+                                )
+
+                                avg, peak, var, p95, spike = evaluate(eval_env, ThresholdPolicy())
 
                                 writer.writerow([
+                                    trial_counter,
                                     energy, battery, outage,
                                     cycle, duration, delay,
-                                    "Periodic", avg, peak, var
+                                    "Threshold", avg, peak, var, p95, spike
                                 ])
 
     print("\nDone! results.csv generated.")
