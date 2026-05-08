@@ -3,11 +3,7 @@ import numpy as np
 
 from environment import AoIEnvironment
 from agent import QLearningAgent
-<<<<<<< HEAD
 from baseline import GreedyPolicy, PeriodicPolicy, ThresholdPolicy
-=======
-from baseline import GreedyPolicy, PeriodicPolicy
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
 # -------------------------
 # PARAMETERS
@@ -21,18 +17,10 @@ sleep_durations = [0, 2, 4]
 
 delay_levels = [1, 2, 3]
 
-<<<<<<< HEAD
 trials = 30            # 🔥 increased
 episodes = 50
 steps = 200
 
-=======
-trials = 20            # 🔥 increased
-episodes = 50
-steps = 200
-
-periodic_intervals = [3, 5, 7]
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
 
 # -------------------------
@@ -54,11 +42,8 @@ def train_rl(env):
             agent.update(state, action, reward, next_state)
             state = next_state
 
-<<<<<<< HEAD
             total_reward += reward  # <-- added
 
-=======
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
         agent.decay_epsilon()
 
         episode_rewards.append(total_reward)  # <-- added
@@ -94,14 +79,11 @@ def evaluate(env, policy):
 
     p95 = np.percentile(values, 95)
 
-<<<<<<< HEAD
     tau = 20  # fixed spike threshold (DO NOT change later)
     spike_freq = np.mean([v > tau for v in values])
 
     return np.mean(values), peak, np.var(values), p95, spike_freq
 
-=======
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 # -------------------------
 # RL WRAPPER
 # -------------------------
@@ -148,10 +130,7 @@ with open("results.csv", "w", newline="") as f:
                             # -------------------------
                             # TRAIN RL ONCE
                             # -------------------------
-<<<<<<< HEAD
                             np.random.seed(42)
-=======
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
                             train_env = AoIEnvironment(
                                 energy_rate=energy,
                                 battery_size=battery,
@@ -172,11 +151,7 @@ with open("results.csv", "w", newline="") as f:
                                 trial_counter += 1
 
                                 # independent randomness
-<<<<<<< HEAD
                                 np.random.seed(1000 + t)
-=======
-                                np.random.seed(None)
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
                                 # -------------------------
                                 # RL
@@ -190,11 +165,7 @@ with open("results.csv", "w", newline="") as f:
                                     delay_steps=delay
                                 )
 
-<<<<<<< HEAD
                                 avg, peak, var, p95, spike = evaluate(eval_env, rl)
-=======
-                                avg, peak, var = evaluate(eval_env, rl)
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
                                 writer.writerow([
                                     trial_counter,
@@ -215,11 +186,7 @@ with open("results.csv", "w", newline="") as f:
                                     delay_steps=delay
                                 )
 
-<<<<<<< HEAD
                                 avg, peak, var, p95, spike = evaluate(eval_env, GreedyPolicy())
-=======
-                                avg, peak, var = evaluate(eval_env, GreedyPolicy())
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
                                 writer.writerow([
                                     trial_counter,
@@ -250,7 +217,6 @@ with open("results.csv", "w", newline="") as f:
                                 ])
 
                                 # -------------------------
-<<<<<<< HEAD
                                 # THRESHOLD POLICY
                                 # -------------------------
                                 eval_env = AoIEnvironment(
@@ -263,40 +229,12 @@ with open("results.csv", "w", newline="") as f:
                                 )
 
                                 avg, peak, var, p95, spike = evaluate(eval_env, ThresholdPolicy())
-=======
-                                # PERIODIC (BEST INTERVAL)
-                                # -------------------------
-                                best_avg = float("inf")
-                                best_peak = None
-                                best_var = None
-
-                                for interval in periodic_intervals:
-                                    eval_env = AoIEnvironment(
-                                        energy_rate=energy,
-                                        battery_size=battery,
-                                        outage_duration=outage,
-                                        sleep_cycle=cycle,
-                                        sleep_duration=duration,
-                                        delay_steps=delay
-                                    )
-
-                                    avg, peak, var = evaluate(eval_env, PeriodicPolicy(interval=interval))
-
-                                    if avg < best_avg:
-                                        best_avg = avg
-                                        best_peak = peak
-                                        best_var = var
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
 
                                 writer.writerow([
                                     trial_counter,
                                     energy, battery, outage,
                                     cycle, duration, delay,
-<<<<<<< HEAD
                                     "Threshold", avg, peak, var, p95, spike
-=======
-                                    "Periodic", best_avg, best_peak, best_var
->>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
                                 ])
 
     print("\nDone! results.csv generated.")
