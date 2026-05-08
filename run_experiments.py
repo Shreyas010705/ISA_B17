@@ -1,4 +1,5 @@
 import csv
+import random
 import numpy as np
 
 from environment import AoIEnvironment
@@ -130,6 +131,7 @@ with open("results.csv", "w", newline="") as f:
                             # -------------------------
                             # TRAIN RL ONCE
                             # -------------------------
+                            random.seed(42)
                             np.random.seed(42)
                             train_env = AoIEnvironment(
                                 energy_rate=energy,
@@ -151,6 +153,7 @@ with open("results.csv", "w", newline="") as f:
                                 trial_counter += 1
 
                                 # independent randomness
+                                random.seed(1000 + t)
                                 np.random.seed(1000 + t)
 
                                 # -------------------------
