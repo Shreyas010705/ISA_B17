@@ -6,19 +6,32 @@ import pandas as pd
 df = pd.read_csv("results.csv")
 
 # -----------------------------------
-# FILTER WORST-CASE CONFIGURATION
+# FILTER STATISTICALLY WORST CONFIGURATION
 # -----------------------------------
 worst = df[
     (df["Energy"] == 0.2) &
     (df["Outage"] == 10) &
-    (df["SleepDuration"] == 4) &
-    (df["Delay"] == 3)
+    (df["SleepDuration"] == 0) &
+    (df["Delay"] == 1)
 ]
 
 # -----------------------------------
-# GROUP BY POLICY
+# STAGE 1:
+# Average trials within each seed
 # -----------------------------------
-summary = worst.groupby("Policy").agg({
+seed_grouped = worst.groupby(
+    [
+        "MasterSeed",
+        "Policy"
+    ]
+).mean(numeric_only=True).reset_index()
+
+
+# -----------------------------------
+# STAGE 2:
+# Aggregate across seeds
+# -----------------------------------
+summary = seed_grouped.groupby("Policy").agg({
     "Avg_AoI": "mean",
     "Variance": "mean",
     "Peak_AoI": "mean",

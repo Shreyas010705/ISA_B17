@@ -1,41 +1,95 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 # -------------------------
 # LOAD DATA
 # -------------------------
 df = pd.read_csv("results.csv")
+NUM_SEEDS = 20
 
-# -------------------------
-# GROUP DATA (mean + std over trials)
-# -------------------------
-grouped = df.groupby(
-    ["Energy", "Battery", "Outage", "SleepDuration", "Delay", "Policy"]
+# --------------------------------------------------
+# STAGE 1:
+# Average trials within each master seed
+# --------------------------------------------------
+seed_grouped = df.groupby(
+    [
+        "MasterSeed",
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepCycle",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).mean(numeric_only=True).reset_index()
+
+
+# --------------------------------------------------
+# STAGE 2:
+# Aggregate across master seeds
+# --------------------------------------------------
+grouped = seed_grouped.groupby(
+    [
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepCycle",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
 ).agg({
     "Avg_AoI": ["mean", "std"],
-    "Peak_AoI": "mean",
-    "Variance": "mean",
-    "P95_AoI": "mean",
-    "Spike_Freq": "mean"
+    "Peak_AoI": ["mean", "std"],
+    "Variance": ["mean", "std"],
+    "P95_AoI": ["mean", "std"],
+    "Spike_Freq": ["mean", "std"],
+    "Switch_Rate": ["mean", "std"],
+    "Recovery_Duration": ["mean", "std"]
 }).reset_index()
 
-# -------------------------
-# FLATTEN COLUMN NAMES
-# -------------------------
+# --------------------------------------------------
+# CLEAN COLUMN NAMES
+# --------------------------------------------------
 grouped.columns = [
-    "Energy",
-    "Battery",
-    "Outage",
-    "SleepDuration",
-    "Delay",
-    "Policy",
-    "Mean_AoI",
-    "Std_AoI",
-    "Peak_AoI",
-    "Variance",
-    "P95_AoI",
-    "Spike_Freq"
+    '_'.join(col).strip('_')
+    if isinstance(col, tuple)
+    else col
+    for col in grouped.columns
 ]
+
+# --------------------------------------------------
+# COMPUTE 95% CONFIDENCE INTERVALS
+# --------------------------------------------------
+grouped["Avg_AoI_ci95"] = (
+    1.96 * grouped["Avg_AoI_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["Peak_AoI_ci95"] = (
+    1.96 * grouped["Peak_AoI_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["Variance_ci95"] = (
+    1.96 * grouped["Variance_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["P95_AoI_ci95"] = (
+    1.96 * grouped["P95_AoI_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["Spike_Freq_ci95"] = (
+    1.96 * grouped["Spike_Freq_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["Switch_Rate_ci95"] = (
+    1.96 * grouped["Switch_Rate_std"] / np.sqrt(NUM_SEEDS)
+)
+
+grouped["Recovery_Duration_ci95"] = (
+    1.96 * grouped["Recovery_Duration_std"] / np.sqrt(NUM_SEEDS)
+)
 
 # ==================================================
 # 1. AVG AOI VS ENERGY (ERROR BARS)
@@ -54,8 +108,8 @@ for policy in grouped["Policy"].unique():
 
         plt.errorbar(
             data["Energy"],
-            data["Mean_AoI"],
-            yerr=data["Std_AoI"],
+            data["Avg_AoI_mean"],
+            yerr=data["Avg_AoI_ci95"],
             marker='o',
             linewidth=2,
             capsize=4,
@@ -110,8 +164,8 @@ for policy in ["RL", "Threshold"]:
 
     plt.errorbar(
         data["SleepDuration"],
-        data["Mean_AoI"],
-        yerr=data["Std_AoI"],
+        data["Avg_AoI_mean"],
+        yerr=data["Avg_AoI_ci95"],
         marker='o',
         linewidth=2,
         capsize=4,
@@ -157,8 +211,8 @@ for policy in grouped["Policy"].unique():
 
         plt.errorbar(
             data["Outage"],
-            data["Mean_AoI"],
-            yerr=data["Std_AoI"],
+            data["Avg_AoI_mean"],
+            yerr=data["Avg_AoI_ci95"],
             marker='o',
             linewidth=2,
             capsize=4,
@@ -193,7 +247,7 @@ for policy in grouped["Policy"].unique():
 pivot_peak = grouped.pivot_table(
     index="Delay",
     columns="Policy",
-    values="Peak_AoI"
+    values="Peak_AoI_mean"
 )
 
 ax = pivot_peak.plot(
@@ -229,7 +283,7 @@ plt.close()
 pivot_var = grouped.pivot_table(
     index="Delay",
     columns="Policy",
-    values="Variance"
+    values="Variance_mean"
 )
 
 ax = pivot_var.plot(
@@ -265,7 +319,7 @@ plt.close()
 pivot_p95 = grouped.pivot_table(
     index="Delay",
     columns="Policy",
-    values="P95_AoI"
+    values="P95_AoI_mean"
 )
 
 ax = pivot_p95.plot(
@@ -301,7 +355,7 @@ plt.close()
 pivot_spike = grouped.pivot_table(
     index="Delay",
     columns="Policy",
-    values="Spike_Freq"
+    values="Spike_Freq_mean"
 )
 
 ax = pivot_spike.plot(
@@ -325,6 +379,78 @@ plt.tight_layout()
 
 plt.savefig(
     "plot_spike.png",
+    dpi=300,
+    bbox_inches='tight'
+)
+
+plt.close()
+
+# ==================================================
+# 8. ACTION SWITCH RATE COMPARISON
+# ==================================================
+pivot_switch = grouped.pivot_table(
+    index="Delay",
+    columns="Policy",
+    values="Switch_Rate_mean"
+)
+
+ax = pivot_switch.plot(
+    kind="bar",
+    figsize=(7, 5)
+)
+
+plt.title(
+    "Action Switch Rate vs Delay",
+    fontsize=13
+)
+
+plt.xlabel("Observation Delay", fontsize=11)
+plt.ylabel("Switch Rate", fontsize=11)
+
+plt.xticks(rotation=0)
+
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+
+plt.savefig(
+    "plot_switch_rate.png",
+    dpi=300,
+    bbox_inches='tight'
+)
+
+plt.close()
+
+# ==================================================
+# 9. RECOVERY DURATION COMPARISON
+# ==================================================
+pivot_recovery = grouped.pivot_table(
+    index="Delay",
+    columns="Policy",
+    values="Recovery_Duration_mean"
+)
+
+ax = pivot_recovery.plot(
+    kind="bar",
+    figsize=(7, 5)
+)
+
+plt.title(
+    "Recovery Duration vs Delay",
+    fontsize=13
+)
+
+plt.xlabel("Observation Delay", fontsize=11)
+plt.ylabel("Average Recovery Duration", fontsize=11)
+
+plt.xticks(rotation=0)
+
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+
+plt.savefig(
+    "plot_recovery_duration.png",
     dpi=300,
     bbox_inches='tight'
 )

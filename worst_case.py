@@ -3,18 +3,64 @@ import pandas as pd
 # Load results
 df = pd.read_csv("results.csv")
 
-# Focus on RL only
-rl = df[df["Policy"] == "RL"]
+# --------------------------------------------------
+# STAGE 1:
+# Average trials within each master seed
+# --------------------------------------------------
+seed_grouped = df.groupby(
+    [
+        "MasterSeed",
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).mean(numeric_only=True).reset_index()
 
-# Define instability score
-# (simple combined severity metric)
+
+# --------------------------------------------------
+# STAGE 2:
+# Aggregate across master seeds
+# --------------------------------------------------
+grouped = seed_grouped.groupby(
+    [
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).agg({
+    "Avg_AoI": "mean",
+    "Variance": "mean",
+    "Peak_AoI": "mean",
+    "P95_AoI": "mean",
+    "Spike_Freq": "mean"
+}).reset_index()
+
+
+# --------------------------------------------------
+# RL ONLY
+# --------------------------------------------------
+rl = grouped[grouped["Policy"] == "RL"].copy()
+
+
+# --------------------------------------------------
+# DEFINE INSTABILITY SCORE
+# --------------------------------------------------
 rl["InstabilityScore"] = (
     rl["Peak_AoI"] +
     rl["P95_AoI"] +
     rl["Variance"]
 )
 
-# Get worst configuration
+
+# --------------------------------------------------
+# GET STATISTICALLY WORST CONFIGURATION
+# --------------------------------------------------
 worst = rl.loc[rl["InstabilityScore"].idxmax()]
 
 print("\n=== WORST RL CONFIGURATION ===\n")

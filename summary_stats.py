@@ -6,10 +6,33 @@ import pandas as pd
 df = pd.read_csv("results.csv")
 
 # --------------------------------------------------
-# GROUP RESULTS
+# STAGE 1:
+# Average trials within each master seed
 # --------------------------------------------------
-grouped = df.groupby(
-    ["Energy", "Outage", "SleepDuration", "Delay", "Policy"]
+seed_grouped = df.groupby(
+    [
+        "MasterSeed",
+        "Energy",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).mean(numeric_only=True).reset_index()
+
+
+# --------------------------------------------------
+# STAGE 2:
+# Aggregate across master seeds
+# --------------------------------------------------
+grouped = seed_grouped.groupby(
+    [
+        "Energy",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
 ).agg({
     "Avg_AoI": "mean",
     "Variance": "mean",

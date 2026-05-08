@@ -22,6 +22,10 @@ trials = 30            # 🔥 increased
 episodes = 50
 steps = 200
 
+# -------------------------
+# MASTER SEEDS
+# -------------------------
+MASTER_SEEDS = list(range(1, 21))
 
 
 # -------------------------
@@ -68,8 +72,17 @@ def evaluate(env, policy):
     values = []
     peak = 0
 
+    actions = []
+
+    # --------------------------------------------------
+    # RECOVERY FAILURE TRACKING
+    # --------------------------------------------------
+    burst_lengths = []
+    current_burst = 0
+
     for _ in range(steps):
         action = policy.choose_action(state)
+        actions.append(action)
         state, _, _ = env.step(action)
 
         # Use TRUE AoI (not delayed state)
@@ -77,13 +90,59 @@ def evaluate(env, policy):
 
         values.append(aoi)
         peak = max(peak, aoi)
+        # --------------------------------------------------
+        # TRACK HIGH-AOI BURSTS
+        # --------------------------------------------------
+        if aoi > 20:
+
+            current_burst += 1
+
+        else:
+
+            if current_burst > 0:
+                burst_lengths.append(current_burst)
+
+            current_burst = 0
 
     p95 = np.percentile(values, 95)
 
     tau = 20  # fixed spike threshold (DO NOT change later)
     spike_freq = np.mean([v > tau for v in values])
 
-    return np.mean(values), peak, np.var(values), p95, spike_freq
+    # --------------------------------------------------
+    # ACTION SWITCHING RATE
+    # --------------------------------------------------
+    switches = 0
+
+    for i in range(1, len(actions)):
+        if actions[i] != actions[i - 1]:
+            switches += 1
+
+    switch_rate = switches / (len(actions) - 1)
+
+    # --------------------------------------------------
+    # HANDLE BURST REACHING FINAL TIMESTEP
+    # --------------------------------------------------
+    if current_burst > 0:
+        burst_lengths.append(current_burst)
+
+    # --------------------------------------------------
+    # RECOVERY DURATION METRIC
+    # --------------------------------------------------
+    if len(burst_lengths) > 0:
+        recovery_duration = np.mean(burst_lengths)
+    else:
+        recovery_duration = 0
+
+    return (
+        np.mean(values),
+        peak,
+        np.var(values),
+        p95,
+        spike_freq,
+        switch_rate,
+        recovery_duration
+    )
 
 # -------------------------
 # RL WRAPPER
@@ -104,140 +163,159 @@ class RLWrapper:
 # -------------------------
 # RUN EXPERIMENTS
 # -------------------------
-with open("results.csv", "w", newline="") as f:
-    writer = csv.writer(f)
+if __name__ == "__main__":
+    with open("results.csv", "w", newline="") as f:
+        writer = csv.writer(f)
 
-    writer.writerow([
-        "Trial_ID",
-        "Energy", "Battery", "Outage",
-        "SleepCycle", "SleepDuration",
-        "Delay",
-        "Policy", "Avg_AoI", "Peak_AoI", "Variance", "P95_AoI", "Spike_Freq"
-    ])
+        writer.writerow([
+            "MasterSeed",
+            "Trial_ID",
+            "Energy", "Battery", "Outage",
+            "SleepCycle", "SleepDuration",
+            "Delay",
+            "Policy", "Avg_AoI", "Peak_AoI", "Variance", "P95_AoI", "Spike_Freq",
+"Switch_Rate", "Recovery_Duration"
+        ])
 
-    print("Running experiments...\n")
+        print("Running experiments...\n")
 
-    trial_counter = 0
+        trial_counter = 0
 
-    for energy in energy_levels:
-        for battery in battery_sizes:
-            for outage in outage_levels:
-                for cycle in sleep_cycles:
-                    for duration in sleep_durations:
-                        for delay in delay_levels:
+        for master_seed in MASTER_SEEDS:
 
-                            print(f"E={energy}, B={battery}, O={outage}, C={cycle}, D={duration}, Delay={delay}")
+            print(f"\n==============================")
+            print(f"MASTER SEED = {master_seed}")
+            print(f"==============================\n")
 
-                            # -------------------------
-                            # TRAIN RL ONCE
-                            # -------------------------
-                            random.seed(42)
-                            np.random.seed(42)
-                            train_env = AoIEnvironment(
-                                energy_rate=energy,
-                                battery_size=battery,
-                                outage_duration=outage,
-                                sleep_cycle=cycle,
-                                sleep_duration=duration,
-                                delay_steps=delay
-                            )
+            random.seed(master_seed)
+            np.random.seed(master_seed)
+            for energy in energy_levels:
+                for battery in battery_sizes:
+                    for outage in outage_levels:
+                        for cycle in sleep_cycles:
+                            for duration in sleep_durations:
+                                for delay in delay_levels:
 
-                            agent = train_rl(train_env)
-                            rl = RLWrapper(agent)
+                                    print(f"E={energy}, B={battery}, O={outage}, C={cycle}, D={duration}, Delay={delay}")
 
-                            # -------------------------
-                            # MULTIPLE TRIALS
-                            # -------------------------
-                            for t in range(trials):
+                                    # -------------------------
+                                    # TRAIN RL ONCE
+                                    # -------------------------
+                                    random.seed(master_seed)
+                                    np.random.seed(master_seed)
+                                    train_env = AoIEnvironment(
+                                        energy_rate=energy,
+                                        battery_size=battery,
+                                        outage_duration=outage,
+                                        sleep_cycle=cycle,
+                                        sleep_duration=duration,
+                                        delay_steps=delay
+                                    )
 
-                                trial_counter += 1
+                                    agent = train_rl(train_env)
+                                    rl = RLWrapper(agent)
 
-                                # independent randomness
-                                random.seed(1000 + t)
-                                np.random.seed(1000 + t)
+                                    # -------------------------
+                                    # MULTIPLE TRIALS
+                                    # -------------------------
+                                    for t in range(trials):
 
-                                # -------------------------
-                                # RL
-                                # -------------------------
-                                eval_env = AoIEnvironment(
-                                    energy_rate=energy,
-                                    battery_size=battery,
-                                    outage_duration=outage,
-                                    sleep_cycle=cycle,
-                                    sleep_duration=duration,
-                                    delay_steps=delay
-                                )
+                                        trial_counter += 1
+                                        
+                                        # -------------------------
+                                        # RL
+                                        # -------------------------
+                                        random.seed(master_seed * 1000 + t)
+                                        np.random.seed(master_seed * 1000 + t)
+                                        eval_env = AoIEnvironment(
+                                            energy_rate=energy,
+                                            battery_size=battery,
+                                            outage_duration=outage,
+                                            sleep_cycle=cycle,
+                                            sleep_duration=duration,
+                                            delay_steps=delay
+                                        )
 
-                                avg, peak, var, p95, spike = evaluate(eval_env, rl)
+                                        avg, peak, var, p95, spike, switch, recovery = evaluate(eval_env, rl)
 
-                                writer.writerow([
-                                    trial_counter,
-                                    energy, battery, outage,
-                                    cycle, duration, delay,
-                                    "RL", avg, peak, var, p95, spike
-                                ])
+                                        writer.writerow([
+                                            master_seed,
+                                            trial_counter,
+                                            energy, battery, outage,
+                                            cycle, duration, delay,
+                                            "RL", avg, peak, var, p95, spike, switch, recovery
+                                        ])
 
-                                # -------------------------
-                                # GREEDY
-                                # -------------------------
-                                eval_env = AoIEnvironment(
-                                    energy_rate=energy,
-                                    battery_size=battery,
-                                    outage_duration=outage,
-                                    sleep_cycle=cycle,
-                                    sleep_duration=duration,
-                                    delay_steps=delay
-                                )
+                                        # -------------------------
+                                        # GREEDY
+                                        # -------------------------
+                                        random.seed(master_seed * 1000 + t)
+                                        np.random.seed(master_seed * 1000 + t)
+                                        eval_env = AoIEnvironment(
+                                            energy_rate=energy,
+                                            battery_size=battery,
+                                            outage_duration=outage,
+                                            sleep_cycle=cycle,
+                                            sleep_duration=duration,
+                                            delay_steps=delay
+                                        )
 
-                                avg, peak, var, p95, spike = evaluate(eval_env, GreedyPolicy())
+                                        avg, peak, var, p95, spike, switch, recovery = evaluate(eval_env, GreedyPolicy())
 
-                                writer.writerow([
-                                    trial_counter,
-                                    energy, battery, outage,
-                                    cycle, duration, delay,
-                                    "Greedy", avg, peak, var, p95, spike
-                                ])
+                                        writer.writerow([
+                                            master_seed,
+                                            trial_counter,
+                                            energy, battery, outage,
+                                            cycle, duration, delay,
+                                            "Greedy", avg, peak, var, p95, spike, switch, recovery
+                                        ])
 
-                                # -------------------------                             
-                                # PERIODIC (FIXED INTERVAL)
-                                # -------------------------
-                                eval_env = AoIEnvironment(
-                                    energy_rate=energy,
-                                    battery_size=battery,
-                                    outage_duration=outage,
-                                    sleep_cycle=cycle,
-                                    sleep_duration=duration,
-                                    delay_steps=delay
-                                )
+                                        # -------------------------                             
+                                        # PERIODIC (FIXED INTERVAL)
+                                        # -------------------------
+                                        random.seed(master_seed * 1000 + t)
+                                        np.random.seed(master_seed * 1000 + t)
+                                        eval_env = AoIEnvironment(
+                                            energy_rate=energy,
+                                            battery_size=battery,
+                                            outage_duration=outage,
+                                            sleep_cycle=cycle,
+                                            sleep_duration=duration,
+                                            delay_steps=delay
+                                        )
 
-                                avg, peak, var, p95, spike = evaluate(eval_env, PeriodicPolicy(interval=5))
+                                        avg, peak, var, p95, spike, switch, recovery = evaluate(eval_env, PeriodicPolicy(interval=5))
 
-                                writer.writerow([
-                                    trial_counter,
-                                    energy, battery, outage,
-                                    cycle, duration, delay,
-                                    "Periodic", avg, peak, var, p95, spike
-                                ])
+                                        writer.writerow([
+                                            master_seed,
+                                            trial_counter,
+                                            energy, battery, outage,
+                                            cycle, duration, delay,
+                                            "Periodic", avg, peak, var, p95, spike, switch, recovery
+                                        ])
 
-                                # -------------------------
-                                # THRESHOLD POLICY
-                                # -------------------------
-                                eval_env = AoIEnvironment(
-                                    energy_rate=energy,
-                                    battery_size=battery,
-                                    outage_duration=outage,
-                                    sleep_cycle=cycle,
-                                    sleep_duration=duration,
-                                    delay_steps=delay
-                                )
+                                        # -------------------------
+                                        # THRESHOLD POLICY
+                                        # -------------------------
+                                        random.seed(master_seed * 1000 + t)
+                                        np.random.seed(master_seed * 1000 + t)
+                                        eval_env = AoIEnvironment(
+                                            energy_rate=energy,
+                                            battery_size=battery,
+                                            outage_duration=outage,
+                                            sleep_cycle=cycle,
+                                            sleep_duration=duration,
+                                            delay_steps=delay
+                                        )
 
-                                avg, peak, var, p95, spike = evaluate(eval_env, ThresholdPolicy())
+                                        avg, peak, var, p95, spike, switch, recovery = evaluate(eval_env, ThresholdPolicy())
 
-                                writer.writerow([
-                                    trial_counter,
-                                    energy, battery, outage,
-                                    cycle, duration, delay,
-                                    "Threshold", avg, peak, var, p95, spike
-                                ])
+                                        writer.writerow([
+                                            master_seed,
+                                            trial_counter,
+                                            energy, battery, outage,
+                                            cycle, duration, delay,
+                                            "Threshold", avg, peak, var, p95, spike, switch, recovery
+                                        ])
 
-    print("\nDone! results.csv generated.")
+        print("\nDone! results.csv generated.")

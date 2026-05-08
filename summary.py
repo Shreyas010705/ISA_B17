@@ -5,12 +5,43 @@ import pandas as pd
 # -------------------------
 df = pd.read_csv("results.csv")
 
-# -------------------------
-# AVERAGE OVER TRIALS
-# -------------------------
-grouped = df.groupby(
-    ["Energy", "Battery", "Outage", "SleepDuration", "Delay", "Policy"]
-).mean().reset_index()
+# --------------------------------------------------
+# STAGE 1:
+# Average trials within each master seed
+# --------------------------------------------------
+seed_grouped = df.groupby(
+    [
+        "MasterSeed",
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).mean(numeric_only=True).reset_index()
+
+
+# --------------------------------------------------
+# STAGE 2:
+# Aggregate across master seeds
+# --------------------------------------------------
+grouped = seed_grouped.groupby(
+    [
+        "Energy",
+        "Battery",
+        "Outage",
+        "SleepDuration",
+        "Delay",
+        "Policy"
+    ]
+).agg({
+    "Avg_AoI": "mean",
+    "Peak_AoI": "mean",
+    "Variance": "mean",
+    "P95_AoI": "mean",
+    "Spike_Freq": "mean"
+}).reset_index()
 
 # -------------------------
 # 1. OVERALL PERFORMANCE

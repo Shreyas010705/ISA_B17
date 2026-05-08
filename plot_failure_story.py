@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -20,9 +21,15 @@ delay = 3
 steps = 200
 
 # --------------------------------------------------
+# REPRESENTATIVE STOCHASTIC REALIZATION
+# --------------------------------------------------
+master_seed = 10
+
+# --------------------------------------------------
 # TRAIN RL AGENT
 # --------------------------------------------------
-np.random.seed(42)
+random.seed(master_seed)
+np.random.seed(master_seed)
 
 train_env = AoIEnvironment(
     energy_rate=energy,
@@ -39,7 +46,8 @@ agent = train_rl(train_env)
 # --------------------------------------------------
 # RL EVALUATION
 # --------------------------------------------------
-np.random.seed(1000)
+random.seed(master_seed * 1000)
+np.random.seed(master_seed * 1000)
 
 rl_env = AoIEnvironment(
     energy_rate=energy,
@@ -68,7 +76,8 @@ for _ in range(steps):
 # --------------------------------------------------
 # THRESHOLD POLICY EVALUATION
 # --------------------------------------------------
-np.random.seed(1000)
+random.seed(master_seed * 1000)
+np.random.seed(master_seed * 1000)
 
 th_env = AoIEnvironment(
     energy_rate=energy,
@@ -130,8 +139,9 @@ plt.xlabel('Timestep', fontsize=12)
 plt.ylabel('AoI', fontsize=12)
 
 plt.title(
-    'AoI Evolution Under Combined Constraints '
-    '(RL vs Threshold)',
+    f'Representative AoI Trajectory '
+    f'Under Combined Constraints '
+    f'(Seed {master_seed})',
     fontsize=14
 )
 
