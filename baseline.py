@@ -68,6 +68,7 @@ class RandomPolicy:
         if battery > 0:
             return random.choice([0, 1])
         else:
+<<<<<<< HEAD
             return 0
 
 
@@ -99,3 +100,6 @@ class ThresholdPolicy:
             return 1  # send
         else:
             return 0  # wait
+=======
+            return 0
+>>>>>>> 848fd0fc16cbda277b73f996508fff017907ea5d
